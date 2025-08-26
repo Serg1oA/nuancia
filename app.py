@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
 load_dotenv()
@@ -7,7 +7,7 @@ import requests
 import json
 import re
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static", static_url_path="")  # important
 CORS(app)
 
 HF_TOKEN = os.environ.get('HF_TOKEN')
@@ -183,6 +183,10 @@ def translate_with_emotions():
 
     except Exception as e:
         return jsonify({'error': f'Translation failed: {str(e)}'}), 500
+
+@app.route("/")
+def serve_static():
+    return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == '__main__':
     host = '0.0.0.0' if os.environ.get('RENDER') else '127.0.0.1'

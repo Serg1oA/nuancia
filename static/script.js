@@ -61,7 +61,7 @@ async function handleGenerate() {
     updateUI();
 
     try {
-        const response = await fetch('http://localhost:5000/api/translate', {
+        const response = await fetch('https://nuancia.onrender.com/api/translate', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

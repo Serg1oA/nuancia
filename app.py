@@ -36,14 +36,19 @@ def translate_text_multiple_ways(text, target_language, top_emotions):
     language_names = {
         "arabic": "Arabic",
         "chinese": "Chinese",
+        "dutch": "Dutch",
         "french": "French",
         "german": "German",
+        "italian": "Italian",
         "japanese": "Japanese",
-        "portuguese_portugal": "Portuguese (Portugal, European)",
+        "polish": "Polish",
         "portuguese_brazil": "Portuguese (Brazil)",
+        "portuguese_portugal": "Portuguese (Portugal, European)",
+        "romanian": "Romanian",
         "russian": "Russian",
-        "spanish_spain": "Spanish (Spain, European)",
         "spanish_latin_america": "Spanish (Latin America)",
+        "spanish_spain": "Spanish (Spain, European)",
+        "ukranian": "Ukranian"
     }
 
     language_name = language_names.get(target_language)

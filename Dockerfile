@@ -13,7 +13,6 @@ COPY static ./static
 COPY app.py ./
 
 # Set environment variables
-ENV HF_TOKEN=${HF_TOKEN}
 ENV TRANSLATION_PROMPT_API_KEY=${TRANSLATION_PROMPT_API_KEY}
 
 # Expose the port

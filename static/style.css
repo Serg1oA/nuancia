@@ -633,9 +633,9 @@ select.text-input {
   }
 }
 
-/* Fix dark mode input text color */
+/* black because the text input sections are actually white in dark mode */
 .dark .text-input {
-  color: #f8fafc;
+  color: black;
 }
 
 /* Style the title and subtitle */

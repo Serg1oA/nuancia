@@ -1,22 +1,26 @@
-FROM python
+# Use a specific version tag for stability
+FROM python:3.12-slim
+
+# Prevent Python from buffering stdout/stderr (better logging)
+ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Copy requirements
-COPY requirements.txt ./
-RUN pip install -r requirements.txt
+# Install dependencies first
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy static files (frontend)
-COPY static ./static
+# Copy app files
+COPY . .
 
-# Copy the backend
-COPY app.py ./
-
-# Set environment variables
-ENV TRANSLATION_PROMPT_API_KEY=${TRANSLATION_PROMPT_API_KEY}
-
-# Expose the port
 EXPOSE 5000
 
-# Run the application
-CMD ["gunicorn", "--worker-tmp-dir", "/dev/shm", "app:app", "--bind", "0.0.0.0:5000"]
+# Optimized Gunicorn for Docker
+# --workers to utilize multiple cores
+CMD ["gunicorn", \
+     "--workers", "4", \
+     "--worker-class", "gthread", \
+     "--threads", "2", \
+     "--worker-tmp-dir", "/dev/shm", \
+     "--bind", "0.0.0.0:5000", \
+     "app:app"]

@@ -4,212 +4,143 @@ from dotenv import load_dotenv
 import os
 import requests
 import json
-import re
 
 load_dotenv()
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 CORS(app)
 
-GEMINI_API_KEY = os.environ.get('TRANSLATION_PROMPT_API_KEY')
+# Updated variable name to be consistent
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+
+# Using Gemini 2.5 Flash - working as of June 2026
+MODEL_ID = "gemini-2.5-flash"
+
+def get_gemini_response(prompt, is_json=True):
+    """Helper to handle Google API calls with optional JSON mode"""
+    API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_ID}:generateContent?key={GEMINI_API_KEY}"
+    
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.2, # Lower temperature for consistency
+        }
+    }
+    
+    if is_json:
+        payload["generationConfig"]["response_mime_type"] = "application/json"
+
+    response = requests.post(
+        API_URL,
+        headers={"Content-Type": "application/json"},
+        json=payload,
+        timeout=30
+    )
+    response.raise_for_status()
+    res_json = response.json()
+    return res_json['candidates'][0]['content']['parts'][0]['text']
 
 def analyze_emotion(text):
-    """Analyze emotion using Gemini API"""
-    API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
-    
+    """Analyze emotion using Gemini API with strict JSON mode"""
     prompt = f"""Analyze the emotions in this text: "{text}"
-
-Identify the primary emotions present and assign a confidence score (0.0 to 1.0) for each emotion.
-
-Respond ONLY with a JSON array in this exact format (no other text):
-[
-  {{"label": "joy", "score": 0.8}},
-  {{"label": "surprise", "score": 0.3}}
-]
-
-Use these emotion labels: joy, sadness, anger, fear, surprise, disgust, neutral.
-Only include emotions with score >= 0.1"""
-
-    data = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }]
-    }
+    Respond with a JSON array of objects with "label" and "score" (0.0 to 1.0).
+    Labels: joy, sadness, anger, fear, surprise, disgust, neutral.
+    Only include emotions with score >= 0.1."""
     
     try:
-        response = requests.post(
-            API_URL,
-            headers={"Content-Type": "application/json"},
-            data=json.dumps(data),
-            timeout=30,
-        )
-        response.raise_for_status()
-        json_response = response.json()
-        
-        emotion_text = json_response['candidates'][0]['content']['parts'][0]['text'].strip()
-        emotion_text = re.sub(r'```json\s*|\s*```', '', emotion_text).strip()
-        emotions = json.loads(emotion_text)
-        
-        return [emotions]
-        
+        raw_output = get_gemini_response(prompt, is_json=True)
+        return json.loads(raw_output) # Returns a list of dicts
     except Exception as e:
         app.logger.error(f"Emotion analysis failed: {e}")
-        return {'error': str(e)}
+        return {"error": str(e)}
 
 def translate_text_multiple_ways(text, target_language, top_emotions):
-    """Generate 3 translations using Gemini API with emotional context"""
-    API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
-    
+    """Generate 3 translations using Gemini API with structural JSON enforcement"""
     language_names = {
-        "arabic": "Arabic",
-        "chinese": "Chinese",
-        "dutch": "Dutch",
-        "french": "French",
-        "german": "German",
-        "italian": "Italian",
-        "japanese": "Japanese",
-        "polish": "Polish",
-        "portuguese_brazil": "Portuguese (Brazil)",
-        "portuguese_portugal": "Portuguese (Portugal, European)",
-        "romanian": "Romanian",
-        "russian": "Russian",
-        "spanish_latin_america": "Spanish (Latin America)",
-        "spanish_spain": "Spanish (Spain, European)",
-        "ukranian": "Ukranian"
+        "arabic": "Arabic", "chinese": "Chinese", "dutch": "Dutch",
+        "french": "French", "german": "German", "italian": "Italian",
+        "japanese": "Japanese", "polish": "Polish", "portuguese_brazil": "Portuguese (Brazil)",
+        "portuguese_portugal": "Portuguese (Portugal)", "romanian": "Romanian",
+        "russian": "Russian", "spanish_latin_america": "Spanish (Latin America)",
+        "spanish_spain": "Spanish (Spain)", "ukranian": "Ukrainian"
     }
     
-    language_name = language_names.get(target_language)
-    if not language_name:
-        return [f"Unsupported language: {target_language}"] * 3
+    lang_name = language_names.get(target_language, "Spanish")
+    emotion_str = ", ".join([f"{e['label']} ({e['score']})" for e in top_emotions])
+
+    prompt = f"""Translate this text into {lang_name}: "{text}"
+    Contextual Emotions: {emotion_str}
     
-    emotion_description = ""
-    if top_emotions:
-        emotion_parts = []
-        for emotion in top_emotions:
-            percentage = f"{emotion['score'] * 100:.1f}%"
-            emotion_parts.append(f"{percentage} of {emotion['label'].lower()}")
-        emotion_description = f" ({', '.join(emotion_parts)})"
+    Provide 3 distinct translations in a JSON object with the following keys:
+    "literal": A precise direct translation.
+    "idiomatic": How a native speaker would naturally say it.
+    "poetic": Evocative, focusing on the mood.
     
-    prompt = f"""You are a world-class translator and linguist with a deep understanding of emotional nuance and cultural context. Your task is to provide three distinct, high-quality translations of the provided text.
+    Respond ONLY with the JSON object."""
 
-Original Text: "{text}"
-Source Emotions Detected: "{emotion_description}"
-Target Language: "{language_name}"
-
-First, analyze the original text and its context to pinpoint the precise emotional undertone. Then, using your deep knowledge of the target language, generate three unique translations that each capture the source emotion.
-
-Each translation should represent a different stylistic approach:
-1.  **The Literal Translation:** A direct, precise translation that maintains the emotional intent and is faithful to the original wording and structure.
-2.  **The Idiomatic Translation:** A natural-sounding translation that a native speaker of the target language would use to express the same emotion. This version should feel authentic and fluid, even if it deviates from the original phrasing.
-3.  **The Poetic Translation:** A more evocative and nuanced translation that focuses on the underlying feeling or mood. This version may use figurative language, metaphor, or a different rhythm to convey the emotion on a deeper level.
-
-Please provide exactly and only three translations, each on a new line, numbered 1, 2, and 3, without any additional commentary."""
-
-    data = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }]
-    }
-    
     try:
-        response = requests.post(
-            API_URL,
-            headers={"Content-Type": "application/json"},
-            data=json.dumps(data),
-            timeout=60,
-        )
-        response.raise_for_status()
-        json_response = response.json()
-        
-        full_response = json_response['candidates'][0]['content']['parts'][0]['text']
-        
-        # Parse the response to extract the 3 translations
-        translations = []
-        lines = full_response.strip().split('\n')
-        
-        for line in lines:
-            line = line.strip()
-            if line:
-                clean_line = re.sub(r'^[0-9]+[\.\:\)]\s*\*?\*?', '', line)
-                clean_line = re.sub(r'\*\*.*?\*\*:?\s*', '', clean_line)
-                if clean_line:
-                    translations.append(clean_line)
-        
-        # Ensure we have exactly 3 translations
-        if len(translations) < 3:
-            parts = re.split(r'[0-9]+[\.\:\)]\s*', full_response)
-            translations = [part.strip() for part in parts if part.strip()]
-        
-        while len(translations) < 3:
-            translations.append(full_response.strip())
-        
-        return translations[:3]
-        
+        raw_output = get_gemini_response(prompt, is_json=True)
+        return json.loads(raw_output)
     except Exception as e:
         app.logger.error(f"Translation failed: {e}")
-        return [f"Translation error: {str(e)}"] * 3
+        return None
 
 @app.route('/api/translate', methods=['POST'])
 def translate_with_emotions():
-    """Main endpoint for emotion-aware translation"""
     try:
         data = request.get_json()
         text = data.get('text', '').strip()
-        target_language = data.get('target_language', 'spanish_spain')
+        target_lang = data.get('target_language', 'spanish_spain')
 
         if not text:
             return jsonify({'error': 'No text provided'}), 400
 
-        # Analyze emotions
-        emotion_analysis = analyze_emotion(text)
+        # 1. Get Emotions
+        emotions_data = analyze_emotion(text)
+        if isinstance(emotions_data, dict) and 'error' in emotions_data:
+            return jsonify(emotions_data), 500
         
-        top_emotions = []
-        if emotion_analysis and 'error' not in emotion_analysis:
-            try:
-                all_emotions = sorted(emotion_analysis[0], key=lambda x: x['score'], reverse=True)
-                top_emotions = [
-                    {
-                        'label': emotion['label'].capitalize(),
-                        'score': emotion['score']
-                    }
-                    for emotion in all_emotions if emotion['score'] >= 0.1
-                ]
-            except (IndexError, KeyError, TypeError) as e:
-                app.logger.warning(f"Could not process emotions: {e}")
+        # Sort and Format for the UI
+        top_emotions = sorted(emotions_data, key=lambda x: x['score'], reverse=True)
+        formatted_emotions = [
+            {'label': e['label'].capitalize(), 'score': e['score']} 
+            for e in top_emotions
+        ]
 
-        # Generate translations
-        translation_results = translate_text_multiple_ways(text, target_language, top_emotions)
+        # 2. Get Translations
+        translations_dict = translate_text_multiple_ways(text, target_lang, formatted_emotions)
         
-        translations = [
-            {'type': '', 'text': translation_text}
-            for translation_text in translation_results
+        if not translations_dict:
+            return jsonify({'error': 'Translation failed'}), 500
+
+        # Format translations for your frontend expectations
+        response_translations = [
+            {'type': 'Literal', 'text': translations_dict.get('literal')},
+            {'type': 'Idiomatic', 'text': translations_dict.get('idiomatic')},
+            {'type': 'Poetic', 'text': translations_dict.get('poetic')}
         ]
 
         return jsonify({
             'original_text': text,
-            'top_emotions': top_emotions,
-            'translations': translations
+            'top_emotions': formatted_emotions,
+            'translations': response_translations
         })
 
     except Exception as e:
         app.logger.error(f"Request failed: {e}")
-        return jsonify({'error': f'Translation failed: {str(e)}'}), 500
+        return jsonify({'error': str(e)}), 500
 
+# --- Static File Serving ---
 @app.route("/")
-def serve_static():
-    return send_from_directory(app.static_folder, 'index.html')
+def serve_index(): return send_from_directory(app.static_folder, 'index.html')
 
-@app.route("/style.css")
-def serve_css():
-    return send_from_directory(app.static_folder, 'style.css', mimetype='text/css')
-
-@app.route("/script.js")
-def serve_js():
-    return send_from_directory(app.static_folder, 'script.js', mimetype='application/javascript')
+@app.route("/<path:path>")
+def serve_static(path): return send_from_directory(app.static_folder, path)
 
 if __name__ == '__main__':
     if not GEMINI_API_KEY:
-        raise ValueError("TRANSLATION_PROMPT_API_KEY environment variable is required")
+        raise ValueError("GEMINI_API_KEY environment variable is required")
     
+    # Check if running on Render.com or locally
     host = '0.0.0.0' if os.environ.get('RENDER') else '127.0.0.1'
     app.run(debug=False, host=host, port=5000)

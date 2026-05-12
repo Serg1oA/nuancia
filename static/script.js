@@ -1,160 +1,147 @@
-// Application state
-let state = {
-    inputText: '',
-    results: [],
+const state = {
+    sourceText: '',
+    userTranslation: '',
+    suggestions: [],
+    userBleu: null,
+    metricsNote: '',
     copiedIndex: null,
     isGenerating: false,
     isDark: false,
-    topEmotions: []
+    errorMessage: '',
 };
 
-// DOM elements
-const textInput = document.getElementById('text-input');
+const sourceInput = document.getElementById('source-input');
+const userTranslationInput = document.getElementById('user-translation-input');
+const contentTypeSelect = document.getElementById('content-type-select');
+const languageSelect = document.getElementById('language-select');
 const generateBtn = document.getElementById('generate-btn');
 const resultsSection = document.getElementById('results-section');
 const resultsContainer = document.getElementById('results-container');
+const userScorePanel = document.getElementById('user-score-panel');
+const userScoreBody = document.getElementById('user-score-body');
 const themeToggle = document.getElementById('theme-toggle');
-const emotionBarsContainer = document.getElementById('emotion-bars');
+const errorBanner = document.getElementById('error-banner');
+const metricsHint = document.getElementById('metrics-hint');
 
-// Initialize the application
 function init() {
     initializeTheme();
-
-    textInput.addEventListener('input', handleInputChange);
+    sourceInput.addEventListener('input', (e) => {
+        state.sourceText = e.target.value;
+        updateUI();
+    });
+    userTranslationInput.addEventListener('input', (e) => {
+        state.userTranslation = e.target.value;
+        updateUI();
+    });
     generateBtn.addEventListener('click', handleGenerate);
     themeToggle.addEventListener('click', toggleTheme);
-
     updateUI();
 }
 
-// Initialize theme
 function initializeTheme() {
     const savedTheme = localStorage.getItem('theme');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const shouldBeDark = savedTheme === 'dark' || (!savedTheme && prefersDark);
-
     state.isDark = shouldBeDark;
     document.documentElement.classList.toggle('dark', state.isDark);
 }
 
-// Toggle theme
 function toggleTheme() {
     state.isDark = !state.isDark;
     document.documentElement.classList.toggle('dark', state.isDark);
     localStorage.setItem('theme', state.isDark ? 'dark' : 'light');
 }
 
-// Handle input changes
-function handleInputChange(event) {
-    state.inputText = event.target.value;
-    updateUI();
+function setError(msg) {
+    state.errorMessage = msg || '';
+    if (msg) {
+        errorBanner.hidden = false;
+        errorBanner.textContent = msg;
+    } else {
+        errorBanner.hidden = true;
+        errorBanner.textContent = '';
+    }
 }
 
-// Handle generate button click
 async function handleGenerate() {
-    if (!state.inputText.trim() || state.isGenerating) return;
-
-    const languageSelect = document.getElementById('language-select');
-    const targetLanguage = languageSelect.value;
+    const source = state.sourceText.trim();
+    if (!source || state.isGenerating) return;
 
     state.isGenerating = true;
+    setError('');
+    state.suggestions = [];
+    state.userBleu = null;
+    state.metricsNote = '';
     updateUI();
 
     try {
-        const response = await fetch('/api/translate', {
+        const response = await fetch('/api/check-translations', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                text: state.inputText,
-                target_language: targetLanguage
-            })
+                source_text: source,
+                user_translation: state.userTranslation.trim() || undefined,
+                content_type: contentTypeSelect.value,
+                target_language: languageSelect.value,
+            }),
         });
 
+        const data = await response.json().catch(() => ({}));
+
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            throw new Error(data.error || `Request failed (${response.status})`);
         }
 
-        const data = await response.json();
-
-        // Check if data and translations exist
-        if (data && data.translations) {
-            state.results = data.translations.map(trans => ({
-                type: trans.type,
-                text: trans.text
-            }));
-            // Extract top emotions
-            state.topEmotions = data.top_emotions;
-        } else {
-            state.results = [{
-                type: 'Error',
-                text: 'No translation data received.'
-            }];
-            state.topEmotions = [];
-        }
-
-    } catch (error) {
-        state.results = [{
-            type: 'Error',
-            text: `Translation failed: ${error.message}`
-        }];
-        state.topEmotions = [];
+        state.suggestions = data.suggestions || [];
+        state.userBleu = data.user_bleu_vs_reference ?? null;
+        state.metricsNote = data.metrics_note || '';
+    } catch (err) {
+        setError(err.message || 'Something went wrong.');
+        state.suggestions = [];
+        state.userBleu = null;
     } finally {
         state.isGenerating = false;
         updateUI();
     }
 }
 
-// Handle copy to clipboard
 async function copyToClipboard(text, index) {
     try {
         await navigator.clipboard.writeText(text);
         state.copiedIndex = index;
         updateUI();
-
-        // Reset copied state after 2 seconds
         setTimeout(() => {
             state.copiedIndex = null;
             updateUI();
         }, 2000);
-    } catch (err) {
-        // Fallback for older browsers
+    } catch {
         fallbackCopyTextToClipboard(text, index);
     }
 }
 
-// Fallback copy method for older browsers
 function fallbackCopyTextToClipboard(text, index) {
-    const textArea = document.createElement("textarea");
+    const textArea = document.createElement('textarea');
     textArea.value = text;
-
-    // Avoid scrolling to bottom
-    textArea.style.top = "0";
-    textArea.style.left = "0";
-    textArea.style.position = "fixed";
-
+    textArea.style.position = 'fixed';
+    textArea.style.top = '0';
+    textArea.style.left = '0';
     document.body.appendChild(textArea);
     textArea.focus();
     textArea.select();
-
     try {
         document.execCommand('copy');
         state.copiedIndex = index;
         updateUI();
-
         setTimeout(() => {
             state.copiedIndex = null;
             updateUI();
         }, 2000);
-    } catch (err) {
-        console.error('Fallback: Oops, unable to copy', err);
+    } catch (e) {
+        console.error(e);
     }
-
     document.body.removeChild(textArea);
 }
 
-// Create copy icon SVG
 function createCopyIcon() {
     return `
     <svg class="icon" viewBox="0 0 24 24">
@@ -164,7 +151,6 @@ function createCopyIcon() {
   `;
 }
 
-// Create check icon SVG
 function createCheckIcon() {
     return `
     <svg class="icon" viewBox="0 0 24 24">
@@ -173,92 +159,105 @@ function createCheckIcon() {
   `;
 }
 
-// Generate emotion bars
-function generateEmotionBars() {
-    if (!state.topEmotions || state.topEmotions.length === 0) {
-        return '';
+function shouldUseRtl() {
+    return languageSelect.value === 'arabic';
+}
+
+function renderUserPanel() {
+    const hasUser = state.userTranslation.trim().length > 0;
+    const show =
+        state.suggestions.length > 0 &&
+        hasUser &&
+        (state.userBleu !== null && state.userBleu !== undefined) &&
+        !state.errorMessage;
+    if (!show) {
+        userScorePanel.style.display = 'none';
+        return;
     }
-
-    const maxScore = Math.max(...state.topEmotions.map(e => e.score));
-
-    const bars = state.topEmotions.map(emotion => {
-        const percentage = (emotion.score / maxScore) * 100;
-        return `
-            <div class="emotion-bar">
-                <div class="emotion-bar-inner" style="width: ${percentage}%;">
-                    <span class="emotion-label">${emotion.label}</span>
-                    <span class="emotion-percentage">${percentage.toFixed(1)}%</span>
-                </div>
+    userScorePanel.style.display = 'flex';
+    if (shouldUseRtl()) {
+        userScoreBody.setAttribute('dir', 'rtl');
+    } else {
+        userScoreBody.removeAttribute('dir');
+    }
+    userScoreBody.innerHTML = `
+      <div class="result-card user-translation-card">
+        <div class="result-card-content">
+          <div class="result-main">
+            <p class="result-label">Your text</p>
+            <p class="result-text">${escapeHtml(state.userTranslation.trim())}</p>
+            <div class="metric-row">
+              <span class="metric-chip" title="Sentence-level BLEU vs the same model baseline used for AI suggestions">BLEU (vs baseline): <strong>${state.userBleu}</strong></span>
             </div>
-        `;
-    }).join('');
-
-    return bars;
+          </div>
+        </div>
+      </div>
+    `;
 }
 
-// Update the UI based on current state
-function updateUI() {
-    // Update generate button
-    const hasText = state.inputText.trim().length > 0;
-    generateBtn.disabled = !hasText || state.isGenerating;
-    generateBtn.textContent = state.isGenerating ? 'Thinking...' : 'Translate Using AI';
-
-    if (state.isGenerating) {
-        generateBtn.classList.add('loading');
-    } else {
-        generateBtn.classList.remove('loading');
-    }
-
-    // Update results section visibility
-    if (state.results.length > 0) {
-        resultsSection.style.display = 'flex';
-        renderResults();
-    } else {
-        resultsSection.style.display = 'none';
-    }
-
-    // Render emotion bars
-    emotionBarsContainer.innerHTML = generateEmotionBars();
+function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
 }
 
-// Render the results
 function renderResults() {
     resultsContainer.innerHTML = '';
+    const rtl = shouldUseRtl();
+    const hasUser = state.userTranslation.trim().length > 0;
 
-    state.results.forEach((result, index) => {
+    state.suggestions.forEach((sug, index) => {
         const isCopied = state.copiedIndex === index;
+        const card = document.createElement('div');
+        card.className = 'result-card';
+        if (rtl) card.setAttribute('dir', 'rtl');
+        else card.removeAttribute('dir');
 
-        const resultCard = document.createElement('div');
-        resultCard.className = 'result-card';
+        const dist =
+            hasUser && typeof sug.edit_distance_from_user === 'number'
+                ? `<span class="metric-chip" title="Levenshtein edit distance between your translation and this suggestion">Edit distance from yours: <strong>${sug.edit_distance_from_user}</strong></span>`
+                : '';
 
-        // Conditionally set the dir attribute for RTL languages like Arabic
-        const languageSelect = document.getElementById('language-select');
-        const targetLanguage = languageSelect.value;
-        if (targetLanguage === 'arabic') {
-            resultCard.setAttribute('dir', 'rtl');
-        } else {
-            resultCard.removeAttribute('dir'); // Ensure LTR for other languages
-        }
-
-        resultCard.innerHTML = `
+        card.innerHTML = `
       <div class="result-card-content">
-        <p class="result-text">${result.text}</p>
-        <button class="copy-button ${isCopied ? 'copied' : ''}" data-index="${index}">
+        <div class="result-main">
+          <p class="result-label">${escapeHtml(sug.label || `Suggestion ${sug.rank || index + 1}`)}</p>
+          <p class="result-text">${escapeHtml(sug.text || '')}</p>
+          <div class="metric-row">
+            <span class="metric-chip" title="Sentence-level BLEU vs an internal model baseline translation">BLEU: <strong>${sug.bleu_vs_reference}</strong></span>
+            ${dist}
+          </div>
+        </div>
+        <button type="button" class="copy-button ${isCopied ? 'copied' : ''}" data-index="${index}">
           ${isCopied ? createCheckIcon() : createCopyIcon()}
           ${isCopied ? 'Copied!' : 'Copy'}
         </button>
       </div>
     `;
 
-        // Add event listener to copy button
-        const copyButton = resultCard.querySelector('.copy-button');
-        copyButton.addEventListener('click', () => {
-            copyToClipboard(result.text, index);
+        card.querySelector('.copy-button').addEventListener('click', () => {
+            copyToClipboard(sug.text, index);
         });
-
-        resultsContainer.appendChild(resultCard);
+        resultsContainer.appendChild(card);
     });
 }
 
-// Start the application
+function updateUI() {
+    const hasSource = state.sourceText.trim().length > 0;
+    generateBtn.disabled = !hasSource || state.isGenerating;
+    generateBtn.textContent = state.isGenerating ? 'Analyzing…' : 'Get AI suggestions & scores';
+    generateBtn.classList.toggle('loading', state.isGenerating);
+
+    if (state.suggestions.length > 0 && !state.errorMessage) {
+        resultsSection.style.display = 'flex';
+        metricsHint.textContent = state.metricsNote || '';
+        renderResults();
+    } else {
+        resultsSection.style.display = 'none';
+        metricsHint.textContent = '';
+    }
+
+    renderUserPanel();
+}
+
 document.addEventListener('DOMContentLoaded', init);

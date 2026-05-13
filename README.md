@@ -1,23 +1,24 @@
 # Nuancia
-### Live demo: https://nuancia.onrender.com
+### Live demo: https://nuancia.onrender.com/
 
 ## 🔤 What is this project about?
-Nuancia is an emotion-aware translation tool that analyzes the emotional tone of text and generates three different translation styles: literal, idiomatic, and poetic. It uses AI to detect emotions like joy, sadness, or anger in the source text and adapts the translation to preserve emotional nuance across 15 languages.
+Nuancia is an AI-assisted translation quality checker. You provide source text, choose a content type and target language, and the app generates three ranked translation suggestions. If you paste your own translation, Nuancia compares it against the same model baseline using sentence-level BLEU and edit-distance metrics so you can quickly evaluate and refine your draft.
 
 ## 💻 Technologies Utilized
 - **Backend**: Flask, Python
-- **AI/ML**: Google Gemini 2.0 Flash API for emotion analysis and translation
-- **Frontend**: Vanilla JavaScript, CSS with dark mode support
-- **Deployment**: Render
+- **AI/ML**: Google Gemini 2.5 Flash API for translation suggestions and scoring reference generation
+- **Frontend**: Vanilla JavaScript, HTML, CSS
+- **Metrics**: Sentence-level BLEU (0-100) + Levenshtein edit distance
+- **Deployment**: Render + Gunicorn
 
 ## ✨ Current Features / Functionality
-- Emotion detection with confidence scores (joy, sadness, anger, fear, surprise, disgust, neutral)
-- Three translation variants per request (literal, idiomatic, poetic)
-- Visual emotion bars showing detected emotional content
-- Support for 15 languages including Arabic (RTL support), Chinese, Spanish, French, German, and more
-- Dark/light theme toggle with localStorage persistence
-- Copy-to-clipboard functionality for translations
+- Three AI translation suggestions per request, ranked by overall fit
+- Content-type aware outputs for marketing, legal, technical, and literary text
+- Optional user-translation scoring with BLEU vs the internal model baseline
+- Character-level edit distance between your translation and each AI suggestion
+- Support for 15 target languages, including RTL rendering for Arabic
+- Dark/light theme toggle with localStorage persistence and copy-to-clipboard actions
 
 ## 🛠️ Upcoming Features / Improvements
-- Translation history tracking
-- Custom emotion-to-style mapping preferences
+- Translation history and saved comparison sessions
+- Additional quality metrics (for example, semantic similarity and terminology consistency checks)

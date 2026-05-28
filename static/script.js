@@ -1,9 +1,10 @@
 const state = {
     sourceText: '',
-    userTranslation: '',
-    suggestions: [],
-    userBleu: null,
-    metricsNote: '',
+    referenceTranslation: '',
+    translations: [],
+    complexity: null,
+    highlightedProvider: null,
+    costNote: '',
     copiedIndex: null,
     isGenerating: false,
     isDark: false,
@@ -11,17 +12,15 @@ const state = {
 };
 
 const sourceInput = document.getElementById('source-input');
-const userTranslationInput = document.getElementById('user-translation-input');
-const contentTypeSelect = document.getElementById('content-type-select');
+const referenceTranslationInput = document.getElementById('reference-translation-input');
 const languageSelect = document.getElementById('language-select');
 const generateBtn = document.getElementById('generate-btn');
 const resultsSection = document.getElementById('results-section');
 const resultsContainer = document.getElementById('results-container');
-const userScorePanel = document.getElementById('user-score-panel');
-const userScoreBody = document.getElementById('user-score-body');
 const themeToggle = document.getElementById('theme-toggle');
 const errorBanner = document.getElementById('error-banner');
 const metricsHint = document.getElementById('metrics-hint');
+const complexityBanner = document.getElementById('complexity-banner');
 
 function init() {
     initializeTheme();
@@ -29,8 +28,8 @@ function init() {
         state.sourceText = e.target.value;
         updateUI();
     });
-    userTranslationInput.addEventListener('input', (e) => {
-        state.userTranslation = e.target.value;
+    referenceTranslationInput.addEventListener('input', (e) => {
+        state.referenceTranslation = e.target.value;
         updateUI();
     });
     generateBtn.addEventListener('click', handleGenerate);
@@ -69,9 +68,10 @@ async function handleGenerate() {
 
     state.isGenerating = true;
     setError('');
-    state.suggestions = [];
-    state.userBleu = null;
-    state.metricsNote = '';
+    state.translations = [];
+    state.complexity = null;
+    state.highlightedProvider = null;
+    state.costNote = '';
     updateUI();
 
     try {
@@ -80,8 +80,7 @@ async function handleGenerate() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 source_text: source,
-                user_translation: state.userTranslation.trim() || undefined,
-                content_type: contentTypeSelect.value,
+                reference_translation: state.referenceTranslation.trim() || undefined,
                 target_language: languageSelect.value,
             }),
         });
@@ -92,13 +91,14 @@ async function handleGenerate() {
             throw new Error(data.error || `Request failed (${response.status})`);
         }
 
-        state.suggestions = data.suggestions || [];
-        state.userBleu = data.user_bleu_vs_reference ?? null;
-        state.metricsNote = data.metrics_note || '';
+        state.translations = data.translations || [];
+        state.complexity = data.complexity || null;
+        state.highlightedProvider = data.highlighted_provider || null;
+        state.costNote = data.cost_note || '';
     } catch (err) {
         setError(err.message || 'Something went wrong.');
-        state.suggestions = [];
-        state.userBleu = null;
+        state.translations = [];
+        state.complexity = null;
     } finally {
         state.isGenerating = false;
         updateUI();
@@ -163,38 +163,6 @@ function shouldUseRtl() {
     return languageSelect.value === 'arabic';
 }
 
-function renderUserPanel() {
-    const hasUser = state.userTranslation.trim().length > 0;
-    const show =
-        state.suggestions.length > 0 &&
-        hasUser &&
-        (state.userBleu !== null && state.userBleu !== undefined) &&
-        !state.errorMessage;
-    if (!show) {
-        userScorePanel.style.display = 'none';
-        return;
-    }
-    userScorePanel.style.display = 'flex';
-    if (shouldUseRtl()) {
-        userScoreBody.setAttribute('dir', 'rtl');
-    } else {
-        userScoreBody.removeAttribute('dir');
-    }
-    userScoreBody.innerHTML = `
-      <div class="result-card user-translation-card">
-        <div class="result-card-content">
-          <div class="result-main">
-            <p class="result-label">Your text</p>
-            <p class="result-text">${escapeHtml(state.userTranslation.trim())}</p>
-            <div class="metric-row">
-              <span class="metric-chip" title="Sentence-level BLEU vs the same model baseline used for AI suggestions">BLEU (vs baseline): <strong>${state.userBleu}</strong></span>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-}
-
 function escapeHtml(s) {
     const div = document.createElement('div');
     div.textContent = s;
@@ -204,28 +172,43 @@ function escapeHtml(s) {
 function renderResults() {
     resultsContainer.innerHTML = '';
     const rtl = shouldUseRtl();
-    const hasUser = state.userTranslation.trim().length > 0;
+    const hasReference = state.referenceTranslation.trim().length > 0;
 
-    state.suggestions.forEach((sug, index) => {
+    state.translations.forEach((item, index) => {
         const isCopied = state.copiedIndex === index;
         const card = document.createElement('div');
-        card.className = 'result-card';
+        card.className = `result-card ${item.highlighted ? 'result-card--highlighted' : ''}`;
         if (rtl) card.setAttribute('dir', 'rtl');
         else card.removeAttribute('dir');
 
-        const dist =
-            hasUser && typeof sug.edit_distance_from_user === 'number'
-                ? `<span class="metric-chip" title="Levenshtein edit distance between your translation and this suggestion">Edit distance from yours: <strong>${sug.edit_distance_from_user}</strong></span>`
+        const cost = item.cost || {};
+        const costTooltip =
+            cost.unit_type === 'characters'
+                ? `Estimated from ${cost.input_units ?? 0} characters × $${Number(cost.rate_per_unit_usd || 0).toFixed(6)} per character`
+                : `Estimated from ${cost.input_units ?? 0} input tokens and ${cost.output_units ?? 0} output tokens. Rates: $${Number(cost.input_rate_per_million_usd || 0).toFixed(2)}/1M input tokens and $${Number(cost.output_rate_per_million_usd || 0).toFixed(2)}/1M output tokens`;
+        const costLabel =
+            cost.unit_type === 'characters'
+                ? `Chars: ${cost.input_units ?? 0}`
+                : `Tokens in/out: ${cost.input_units ?? 0}/${cost.output_units ?? 0}`;
+
+        const chrfChip =
+            hasReference && typeof item.chrf_vs_reference === 'number'
+                ? `<span class="metric-chip" title="Character n-gram F-score against your reference translation (0-100)">ChrF: <strong>${item.chrf_vs_reference}</strong></span>`
                 : '';
+        const recommendedBadge = item.highlighted
+            ? `<span class="recommended-badge">Recommended (${(state.complexity || '').toLowerCase()})</span>`
+            : '';
 
         card.innerHTML = `
       <div class="result-card-content">
         <div class="result-main">
-          <p class="result-label">${escapeHtml(sug.label || `Suggestion ${sug.rank || index + 1}`)}</p>
-          <p class="result-text">${escapeHtml(sug.text || '')}</p>
+          <p class="result-label">${escapeHtml(item.label || `Translation ${index + 1}`)} ${recommendedBadge}</p>
+          <p class="result-text">${escapeHtml(item.text || '')}</p>
           <div class="metric-row">
-            <span class="metric-chip" title="Sentence-level BLEU vs an internal model baseline translation">BLEU: <strong>${sug.bleu_vs_reference}</strong></span>
-            ${dist}
+            <span class="metric-chip" title="${escapeHtml(item.quality_tooltip || 'Calculated with Gemini')}">Quality (Gemini): <strong>${item.quality_score ?? '-'}</strong></span>
+            <span class="metric-chip" title="${escapeHtml(costTooltip)}">Estimated cost: <strong>$${Number(cost.amount_usd || 0).toFixed(6)}</strong></span>
+            <span class="metric-chip" title="${escapeHtml(costTooltip)}">${escapeHtml(costLabel)}</span>
+            ${chrfChip}
           </div>
         </div>
         <button type="button" class="copy-button ${isCopied ? 'copied' : ''}" data-index="${index}">
@@ -236,7 +219,7 @@ function renderResults() {
     `;
 
         card.querySelector('.copy-button').addEventListener('click', () => {
-            copyToClipboard(sug.text, index);
+            copyToClipboard(item.text, index);
         });
         resultsContainer.appendChild(card);
     });
@@ -245,19 +228,25 @@ function renderResults() {
 function updateUI() {
     const hasSource = state.sourceText.trim().length > 0;
     generateBtn.disabled = !hasSource || state.isGenerating;
-    generateBtn.textContent = state.isGenerating ? 'Analyzing…' : 'Get AI suggestions & scores';
+    generateBtn.textContent = state.isGenerating ? 'Analyzing…' : 'Translate & Analyze';
     generateBtn.classList.toggle('loading', state.isGenerating);
 
-    if (state.suggestions.length > 0 && !state.errorMessage) {
+    if (state.translations.length > 0 && !state.errorMessage) {
         resultsSection.style.display = 'flex';
-        metricsHint.textContent = state.metricsNote || '';
+        const ruleLabel =
+            state.complexity === 'COMPLEX'
+                ? 'Complexity is COMPLEX, so Gemini is highlighted.'
+                : 'Complexity is SIMPLE, so DeepL is highlighted.';
+        complexityBanner.textContent = state.complexity
+            ? `Complexity: ${state.complexity}. ${ruleLabel}`
+            : '';
+        metricsHint.textContent = state.costNote || '';
         renderResults();
     } else {
         resultsSection.style.display = 'none';
+        complexityBanner.textContent = '';
         metricsHint.textContent = '';
     }
-
-    renderUserPanel();
 }
 
 document.addEventListener('DOMContentLoaded', init);

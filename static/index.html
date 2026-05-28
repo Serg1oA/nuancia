@@ -32,7 +32,7 @@
             <div class="header">
                 <h1>Nuancia</h1>
                 <p class="subtitle">
-                    Check translation quality with BLEU-style scores, compare your draft to three AI suggestions by content type, and see edit distance where you paste your own translation.<br>
+                    Compare two translations for the same source text, see complexity-aware highlighting, estimated costs, ChrF against your reference, and Gemini quality scores.<br>
                     Made by Sérgio Almeida — <a href="https://github.com/Serg1oA" target="_blank">GitHub</a> | <a href="https://www.linkedin.com/in/almeidasergiomc" target="_blank">LinkedIn</a>
                 </p>
             </div>
@@ -49,25 +49,16 @@
                 </div>
 
                 <div class="input-group">
-                    <label for="user-translation-input">Your translation <span class="label-optional">(optional)</span></label>
+                    <label for="reference-translation-input">Reference translation <span class="label-optional">(optional)</span></label>
                     <textarea
-                        id="user-translation-input"
+                        id="reference-translation-input"
                         class="text-input textarea-input"
                         rows="3"
-                        placeholder="If you already have a translation, paste it here to score it and compare it to the AI suggestions."
+                        placeholder="Optional: add a trusted reference translation to calculate ChrF for each output."
                     ></textarea>
                 </div>
 
                 <div class="input-row">
-                    <div class="input-group input-group--grow">
-                        <label for="content-type-select">Content type</label>
-                        <select id="content-type-select" class="text-input">
-                            <option value="marketing">Marketing</option>
-                            <option value="legal">Legal</option>
-                            <option value="technical" selected>Technical</option>
-                            <option value="literary">Literary</option>
-                        </select>
-                    </div>
                     <div class="input-group input-group--grow">
                         <label for="language-select">Target language</label>
                         <select id="language-select" class="text-input">
@@ -91,19 +82,15 @@
                 </div>
 
                 <button id="generate-btn" class="fancy-button" type="button">
-                    Get AI suggestions &amp; scores
+                    Translate &amp; Analyze
                 </button>
 
                 <p id="error-banner" class="error-banner" role="alert" hidden></p>
             </div>
 
-            <div id="user-score-panel" class="user-score-panel" style="display: none;">
-                <h2>Your translation</h2>
-                <div id="user-score-body" class="user-score-body"></div>
-            </div>
-
             <div id="results-section" class="results-section" style="display: none;">
-                <h2>AI suggestions</h2>
+                <h2>Translations</h2>
+                <p id="complexity-banner" class="complexity-banner"></p>
                 <p id="metrics-hint" class="metrics-hint"></p>
                 <div id="results-container" class="results-container"></div>
             </div>

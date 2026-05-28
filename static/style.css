@@ -174,28 +174,21 @@ label {
   background: rgba(239, 68, 68, 0.12);
 }
 
-.user-score-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.user-score-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.user-translation-card .result-card-content {
-  flex-direction: column;
-  align-items: stretch;
-}
-
 .metrics-hint {
   font-size: var(--text-xs);
   color: var(--muted-foreground);
   margin: 0;
   line-height: 1.45;
+}
+
+.complexity-banner {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--foreground);
+  font-size: var(--text-sm);
 }
 
 .metric-row {
@@ -227,6 +220,18 @@ label {
   font-weight: var(--font-weight-medium);
   color: var(--muted-foreground);
   margin-bottom: 0.35rem;
+}
+
+.recommended-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 9999px;
+  background: #16a34a;
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .result-main {
@@ -540,6 +545,11 @@ select.text-input {
   transform: translateY(-2px);
 }
 
+.result-card--highlighted {
+  border-color: #16a34a;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
+}
+
 .dark .result-card {
   border-color: #4b5563;
 }
@@ -633,9 +643,9 @@ select.text-input {
   }
 }
 
-/* black because the text input sections are actually white in dark mode */
+/* keep dark mode text readable on light input backgrounds */
 .dark .text-input {
-  color: black;
+  color: #0f172a;
 }
 
 /* Style the title and subtitle */
